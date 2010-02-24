@@ -1,0 +1,11 @@
+syntax: glob
+*\.cert
+*\.key
+*\.orig
+TEST-*\.xml
+bin
+build
+dist
+run-config\.sh
+\.classpath
+\.project
