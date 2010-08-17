@@ -1,0 +1,18 @@
+syntax: glob
+*\.cert
+*\.crt
+*\.key
+*\.orig
+*\.iml
+*\.ipr
+*\.iws
+TEST-*\.xml
+bin
+build
+dist
+run-config\.sh
+\.classpath
+\.project
+out
+*~
+war/webclient
