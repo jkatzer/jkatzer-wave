@@ -1,0 +1,149 @@
+/**
+ * Copyright 2009 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+// The client-server protocol for the prototype waveserver/client.
+// This protocol is a very simple example of how a client/server protocol may
+// be implemented.
+//
+// Author: jochen@google.com (Jochen Bekmann)
+
+syntax = "proto2";
+
+import "org/waveprotocol/wave/examples/fedone/rpc/rpc.proto";
+import "org/waveprotocol/wave/federation/federation.protodevel";
+
+package waveserver;
+
+option java_package = "org.waveprotocol.wave.examples.fedone.waveserver";
+option java_outer_classname = "WaveClientRpc";
+
+service ProtocolWaveClientRpc {
+  rpc Open (ProtocolOpenRequest) returns (ProtocolWaveletUpdate) {
+    option (rpc.is_streaming_rpc) = true;
+  };
+  rpc Submit (ProtocolSubmitRequest) returns (ProtocolSubmitResponse);
+}
+
+/**
+ * A client requests updates for wavelets in the given waveId and accessible to the
+ * given participant. All wavelets in the set will be streamed in version order,
+ * starting at version 0.
+ *
+ * The default is that there is no order defined for update ordering by waveletId,
+ * however for Index Waves (TODO: define this) these will be streamed
+ * in date order, capped by the maximumWavelets parameter.
+ */
+message ProtocolOpenRequest {
+  required string participant_id = 1;
+  required string wave_id = 2;
+  repeated string wavelet_id_prefix = 3;
+  optional int32 maximum_wavelets = 4;
+  // Set to true if client understands snapshots.
+  optional bool snapshots = 5 [default=false];
+  // Sent in a reconnect to tell the server about the client's current state
+  // TODO(arb): this is currently disabled, see the TODO in ClientFrontendImpl.
+  repeated WaveletVersion known_wavelets = 6;
+}
+
+// A pair of (wavelet id, wavelet version)
+message WaveletVersion {
+  required string wavelet_id = 1;
+  required federation.ProtocolHashedVersion hashed_version = 2;
+}
+
+// A pair of (document_id, document)
+message DocumentSnapshot {
+  required string document_id = 1;
+  // This is a document operation that takes the document from zero to its current state.
+  required federation.ProtocolDocumentOperation document_operation = 2;
+}
+
+/**
+ * Snapshot of a wavelet. May be sent at any time, but will typically be sent when the client
+ * first views a wavelet.
+ */
+message WaveletSnapshot {
+  // The list of participants of this wavelet.
+  repeated string participant_id = 1;
+  // For each document in the wavelet, there is one of these. Another way to think of this is
+  // that it's a map of document_id to documents.
+  repeated DocumentSnapshot document = 2;
+}
+
+/**
+ * Update message for a wave view.
+ * Contains either:
+ * - a channel id (only)
+ * - a marker (only)
+ * - a wavelet name, snapshot, version, and commit version
+ * - a wavelet name, deltas, version
+ * Must contain either one or more applied deltas or a commit notice.
+ *
+ * TODO(anorth): rename to reflect that this is a view update, not wavelet
+ */
+message ProtocolWaveletUpdate {
+  // Specifies the wavelet name in the URI netpath notation.
+  // Set only if there are deltas
+  // TODO(anorth) make optional for channel id, marker updates
+  required string wavelet_name = 1;
+
+  // Zero or more deltas for this wavelet, streamed in order.
+  // If snapshot is set, there should be zero deltas.
+  // TODO(soren): consider using this in the snapshot case for uncommitted deltas.
+  repeated federation.ProtocolWaveletDelta applied_delta = 2;
+
+  // Indicates that the host server has committed the wavelet to disk at the
+  // given version. Mandatory for snapshots.
+  optional federation.ProtocolHashedVersion commit_notice = 3;
+
+  // Resulting version of the wavelet after all deltas have been applied
+  // May only be missing if there are no appliedDeltas
+  // If snapshot is set, this is the version number of the snapshot, and is
+  // mandatory.
+  optional federation.ProtocolHashedVersion resulting_version = 4;
+
+  // An optional snapshot of the wavelet
+  optional WaveletSnapshot snapshot = 5;
+
+  // View open marker, signifies all current snapshots have been sent.
+  optional bool marker = 6 [default=false];
+
+  // Channel id, set only in the first update to a client.
+  // The client includes it in submits.
+  optional string channel_id = 7;
+}
+
+/**
+ * The client requests that the given delta be applied to the wavelet.
+ */
+message ProtocolSubmitRequest {
+  required string wavelet_name = 1;
+  required federation.ProtocolWaveletDelta delta = 2;
+  optional string channel_id = 3;
+}
+
+/**
+ * The result of submitting the delta to the server. If an error occurs
+ * errorMessage will be present, otherwise hashedVersionAfterApplication will be
+ * present. operationsApplied will report the actual number of operations
+ * successfully applied to the wavelet by the server.
+ */
+message ProtocolSubmitResponse {
+  required int32 operations_applied = 1;
+  optional string error_message = 2;
+  optional federation.ProtocolHashedVersion hashed_version_after_application = 3;
+}
